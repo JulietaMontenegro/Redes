@@ -21,7 +21,7 @@ public class Cliente  {
     private PublicKey publicKey;
     private PrivateKey privateKey;
     private PublicKey publicKeyServer;
-    private byte[] buffer= new byte[2048];
+    private byte[] buffer= new byte[5000];
 
     public Cliente(DatagramSocket datagramSocket, InetAddress inetAddress) throws NoSuchPaddingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
         this.datagramSocket = datagramSocket;
@@ -144,8 +144,8 @@ public class Cliente  {
             Thread recibir = new Thread(() -> {
                 try {
                     while (true) {
-                        byte[] buffer2 = new byte[1024];
-                        DatagramPacket datagramPacket2 = new DatagramPacket(buffer2, buffer2.length);
+                        Arrays.fill(buffer, (byte) 0);
+                        DatagramPacket datagramPacket2 = new DatagramPacket(buffer, buffer.length);
                         datagramSocket.receive(datagramPacket2);
                         String recibido = new String(datagramPacket2.getData(), 0, datagramPacket2.getLength());
                         if(this.publicKeyServer==null){
@@ -187,7 +187,6 @@ public class Cliente  {
                 buffer = msjFinal.getBytes();
                 DatagramPacket datagramPacket = new DatagramPacket(buffer, buffer.length, inetAddress, 5000); // 5000 es el numero de puerto del servidor
                 datagramSocket.send(datagramPacket);
-                Arrays.fill(buffer, (byte) 0);
             }
         } catch (IOException e) {
             e.printStackTrace();

@@ -21,7 +21,7 @@ public class Servidor {
     private PublicKey publicKey;
     private PrivateKey privateKey;
     private HashMap<PublicKey, Socket>listaClaves;
-    private byte[] buffer= new byte[2048];
+
 
     public Servidor(DatagramSocket datagramSocket) throws NoSuchPaddingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
         this.datagramSocket = datagramSocket;
@@ -91,6 +91,7 @@ public class Servidor {
         return pemKey.toString();
     }
     public void mandarClavePublica(InetAddress direccion, int port) throws Exception {
+        byte[] buffer;
         String claveString= publicKeyToPEM(this.publicKey);
         buffer=claveString.getBytes();
         DatagramPacket datagramPacket= new DatagramPacket(buffer, buffer.length, direccion, port);
@@ -134,6 +135,8 @@ public class Servidor {
     public void recibirReenviar() throws NoSuchAlgorithmException {
         while(true){
             try{
+                byte[] buffer= new byte[5000];
+                Arrays.fill(buffer, (byte) 0);
                 DatagramPacket datagramPacket= new DatagramPacket(buffer, buffer.length);
                 datagramSocket.receive(datagramPacket);
                 InetAddress direccion=datagramPacket.getAddress();
@@ -174,8 +177,8 @@ public class Servidor {
                     hashMsj= DecryptHash(hashMsj, claveActual);
                     mensaje=mensaje.substring(0, delimitador);
                     mensaje= Decrypt(mensaje);
-                    System.out.println("MENSAJEEE " +  mensaje);
-                    System.out.println("HAAASH  " + hashMsj);
+                    System.out.println("MENSAJE " +  mensaje);
+                    System.out.println("HASH  " + hashMsj);
                     System.out.println(hashear(mensaje));
 
                     if(hashear(mensaje).equals(hashMsj)){
@@ -184,7 +187,8 @@ public class Servidor {
 
                     System.out.println("Mensaje que llegó de un cliente: " + mensaje);
                     if(enviarConfirmacion) {
-                        if(integridad){ if(mensaje.contains("/s")){
+                        if(integridad){
+                            if(mensaje.contains("/s")){
                             boolean existe=false;
                             for(Topico topico: listaTopicos){
                                 if(topico.getNombre().equals(String.valueOf(mensaje.charAt(mensaje.length()-1)))){
