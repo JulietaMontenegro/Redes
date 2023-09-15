@@ -154,6 +154,7 @@ public class Servidor {
                         break;
                     }
                 }
+
                 boolean enviarConfirmacion=true;
                 if(!existeEnLista){
                     this.listaClaves.put(convertPEMToRSA(mensaje), actual);
@@ -182,13 +183,8 @@ public class Servidor {
                     System.out.println(hashear(mensaje));
 
                     if(hashear(mensaje).equals(hashMsj)){
-                        integridad=true;
-                    }
-
-                    System.out.println("Mensaje que llegó de un cliente: " + mensaje);
-                    if(enviarConfirmacion) {
-                        if(integridad){
-                            if(mensaje.contains("/s")){
+                        System.out.println("Mensaje que llegó de un cliente: " + mensaje);
+                        if(mensaje.contains("/s")){
                             boolean existe=false;
                             for(Topico topico: listaTopicos){
                                 if(topico.getNombre().equals(String.valueOf(mensaje.charAt(mensaje.length()-1)))){
@@ -208,46 +204,48 @@ public class Servidor {
                                 }
                             }
                         }
-                            String lista="";
-                            for(Topico topico: listaTopicos){
-                                lista= lista + " TOPICO " + topico.getNombre() + " CANT " + topico.getListaSuscriptores().size();
-                            }
-                            System.out.println(lista);
-                            mensaje="Sé que vos enviaste " + mensaje;
-
-                        }else{
-                            mensaje="Se manipuló la info por terceros, por favor mandá otra vez";
+                        String lista="";
+                        for(Topico topico: listaTopicos){
+                            lista= lista + " TOPICO " + topico.getNombre() + " CANT " + topico.getListaSuscriptores().size();
                         }
-                        buffer= Encrypt(mensaje, claveActual).getBytes();
+                        System.out.println(lista);
+                        String mensajeIntegridad="Sé que vos enviaste " + mensaje;
+                        buffer= Encrypt(mensajeIntegridad, claveActual).getBytes();
                         datagramPacket= new DatagramPacket(buffer, buffer.length, direccion, port);
                         datagramSocket.send(datagramPacket);
-                    }else{
+
+                        PublicKey claveSuscriptor=null;
+                        if(!mensaje.contains("/s") && !mensaje.contains("/d") ) {
+                                for (Topico topico : listaTopicos) {
+                                    if (topico.getNombre().equals(String.valueOf(mensaje.charAt(0)))) {
+                                        System.out.println("entro a los topicosss");
+                                        for (Socket socket : topico.getListaSuscriptores()) {
+                                            for (Map.Entry<PublicKey, Socket> entrada : listaClaves.entrySet()) {
+                                                if (entrada.getValue().getPuerto() == socket.getPuerto() && entrada.getValue().getInetAddress().equals(socket.getInetAddress())) {
+                                                    claveSuscriptor = entrada.getKey();
+                                                    break;
+                                                }
+                                            }
+                                            buffer = Encrypt(mensaje, claveSuscriptor).getBytes();
+                                            datagramPacket = new DatagramPacket(buffer, buffer.length, socket.getInetAddress(), socket.getPuerto());
+                                            datagramSocket.send(datagramPacket);
+                                            System.out.println("Se mandó msjs a topicos");
+                                        }
+                                    }
+                                }
+                        }
+                    }else {
+                        mensaje = "Se manipuló la info por terceros, por favor mandá otra vez";
+                        buffer = Encrypt(mensaje, claveActual).getBytes();
+                        datagramPacket = new DatagramPacket(buffer, buffer.length, direccion, port);
+                        datagramSocket.send(datagramPacket);
+                    }
+
+                    if(!enviarConfirmacion) {
                         String msj="Recibí tu clave pública";
                         buffer= Encrypt(msj, claveActual).getBytes();
                         datagramPacket=new DatagramPacket(buffer, buffer.length, direccion, port);
                         datagramSocket.send(datagramPacket);
-                    }
-
-                    PublicKey claveSuscriptor=null;
-                    if(!mensaje.contains("/s") && !mensaje.contains("/d") ) {
-                        if (integridad) {
-                            for (Topico topico : listaTopicos) {
-                                if (topico.getNombre().equals(String.valueOf(mensaje.charAt(0)))) {
-                                    for (Socket socket : topico.getListaSuscriptores()) {
-                                        for (Map.Entry<PublicKey, Socket> entrada : listaClaves.entrySet()) {
-                                            if (entrada.getValue().getPuerto() == socket.getPuerto() && entrada.getValue().getInetAddress().equals(socket.getInetAddress())) {
-                                                claveSuscriptor = entrada.getKey();
-                                                break;
-                                            }
-                                        }
-                                        buffer = Encrypt(mensaje, claveSuscriptor).getBytes();
-                                        datagramPacket = new DatagramPacket(buffer, buffer.length, socket.getInetAddress(), socket.getPuerto());
-                                        datagramSocket.send(datagramPacket);
-                                        System.out.println("Se mandó msjs a topicos");
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
                 Arrays.fill(buffer, (byte) 0);

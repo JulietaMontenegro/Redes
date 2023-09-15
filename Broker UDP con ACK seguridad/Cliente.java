@@ -78,7 +78,6 @@ public class Cliente  {
     //mandar la clave publica al servidor
     public void mandarClavePublica() throws Exception {
         String claveString= publicKeyToPEM(this.publicKey);
-        System.out.println(publicKeyToPEM(this.publicKey));
         buffer=claveString.getBytes();
         DatagramPacket datagramPacket= new DatagramPacket(buffer, buffer.length, inetAddress, 5000);
         datagramSocket.send(datagramPacket);
@@ -150,9 +149,8 @@ public class Cliente  {
                         String recibido = new String(datagramPacket2.getData(), 0, datagramPacket2.getLength());
                         if(this.publicKeyServer==null){
                             setPublicKeyServer(convertPEMToRSA(recibido));
-                            System.out.println("server:" +convertPEMToRSA(recibido) );
+                            System.out.println("RECIBISTE LA CLAVE PUBLICA DEL SERVER");
                         }else{
-                            System.out.println("Llega " + recibido);
                             System.out.println(Decrypt(recibido));
                         }
                         Arrays.fill(buffer, (byte) 0);
@@ -178,12 +176,9 @@ public class Cliente  {
                 Arrays.fill(buffer, (byte) 0);
                 String mensaje = entrada.nextLine();
                 String hash= hashear(mensaje);
-                System.out.println("EL HASH " + hash);
                 hash= EncryptHash(hash);
-                System.out.println("ENCRIPTADO " + hash);
                 mensaje= Encrypt(mensaje);
                 String msjFinal= mensaje + "°" + hash;
-                System.out.println(msjFinal);
                 buffer = msjFinal.getBytes();
                 DatagramPacket datagramPacket = new DatagramPacket(buffer, buffer.length, inetAddress, 5000); // 5000 es el numero de puerto del servidor
                 datagramSocket.send(datagramPacket);
