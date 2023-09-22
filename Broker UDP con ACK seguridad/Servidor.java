@@ -270,14 +270,7 @@ public class Servidor {
                         if(!mensaje.contains("/s") && !mensaje.contains("/d") ) {
                                 for (Topico topico : listaTopicos) {
                                     if (topico.getNombre().equals(String.valueOf(mensaje.charAt(0)))) {
-                                        System.out.println("entro a los topicosss");
                                         for (Socket socket : topico.getListaSuscriptores()) {
-                                            for (Map.Entry<PublicKey, Socket> entrada : listaClaves.entrySet()) {
-                                                if (entrada.getValue().getPuerto() == socket.getPuerto() && entrada.getValue().getInetAddress().equals(socket.getInetAddress())) {
-                                                    claveSuscriptor = entrada.getKey();
-                                                    break;
-                                                }
-                                            }
                                             buffer = encriptar(mensaje).getBytes();
                                             datagramPacket = new DatagramPacket(buffer, buffer.length, socket.getInetAddress(), socket.getPuerto());
                                             datagramSocket.send(datagramPacket);
