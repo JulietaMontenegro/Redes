@@ -1,7 +1,5 @@
-import javax.crypto.BadPaddingException;
-import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
+import javax.crypto.*;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
@@ -20,14 +18,62 @@ public class Servidor {
     private HashSet<Topico>listaTopicos;
     private PublicKey publicKey;
     private PrivateKey privateKey;
+    private SecretKeySpec claveSimetrica;
     private HashMap<PublicKey, Socket>listaClaves;
 
-
-    public Servidor(DatagramSocket datagramSocket) throws NoSuchPaddingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
+    public Servidor(DatagramSocket datagramSocket) throws NoSuchPaddingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException, UnsupportedEncodingException {
         this.datagramSocket = datagramSocket;
         this.listaTopicos= new HashSet<Topico>();
         this.listaClaves=new HashMap<>();
         genKeyPair(1024);
+        this.claveSimetrica= crearClave();
+    }
+    private SecretKeySpec crearClave() throws UnsupportedEncodingException, NoSuchAlgorithmException {
+        String clave= "Esta clave es secreta";
+        byte[] claveEncriptacion = clave.getBytes("UTF-8");
+        MessageDigest sha = MessageDigest.getInstance("SHA-1");
+        claveEncriptacion = sha.digest(claveEncriptacion);
+        claveEncriptacion = Arrays.copyOf(claveEncriptacion, 16);
+        SecretKeySpec secretKey = new SecretKeySpec(claveEncriptacion, "AES");
+        return secretKey;
+    }
+    public String encriptar(String datos) throws UnsupportedEncodingException, NoSuchAlgorithmException, InvalidKeyException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
+        SecretKeySpec secretKey = this.claveSimetrica;
+        Cipher cipher = Cipher.getInstance("AES");
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+        byte[] datosEncriptar = datos.getBytes("UTF-8");
+        byte[] bytesEncriptados = cipher.doFinal(datosEncriptar);
+        String encriptado = Base64.getEncoder().encodeToString(bytesEncriptados);
+        return encriptado;
+    }
+    public String desencriptar(String datosEncriptados) throws UnsupportedEncodingException, NoSuchAlgorithmException, InvalidKeyException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
+        SecretKeySpec secretKey = this.claveSimetrica;
+        Cipher cipher = Cipher.getInstance("AES");
+        cipher.init(Cipher.DECRYPT_MODE, secretKey);
+        byte[] bytesEncriptados = Base64.getDecoder().decode(datosEncriptados);
+        byte[] datosDesencriptados = cipher.doFinal(bytesEncriptados);
+        String datos = new String(datosDesencriptados);
+
+        return datos;
+    }
+    public  String convertSecretKeyToString() throws NoSuchAlgorithmException {
+        byte[] rawData = this.claveSimetrica.getEncoded();
+        String encodedKey = Base64.getEncoder().encodeToString(rawData);
+        return encodedKey;
+    }
+    public SecretKeySpec convertStringToSecretKeyto(String encodedKey) {
+        byte[] decodedKey = Base64.getDecoder().decode(encodedKey);
+        SecretKeySpec originalKey = new SecretKeySpec(decodedKey, 0, decodedKey.length, "AES");
+        return originalKey;
+    }
+    public void mandarClaveSimetrica(InetAddress direccion, int port,PublicKey claveCliente) throws NoSuchAlgorithmException, IOException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, InvalidKeySpecException, InvalidKeyException, NoSuchProviderException {
+        byte[] buffer;
+        String claveString= convertSecretKeyToString();
+        String claveEncrip=Encrypt(claveString, claveCliente);
+        buffer=claveEncrip.getBytes();
+        DatagramPacket datagramPacket= new DatagramPacket(buffer, buffer.length, direccion, port);
+        datagramSocket.send(datagramPacket);
+        Arrays.fill(buffer, (byte) 0);
     }
     public PublicKey getPublicKey() {
         return publicKey;
@@ -41,7 +87,12 @@ public class Servidor {
     public void setPrivateKey(PrivateKey privateKey) {
         this.privateKey = privateKey;
     }
-
+    public SecretKeySpec getClaveSimetrica() {
+        return claveSimetrica;
+    }
+    public void setClaveSimetrica(SecretKeySpec claveSimetrica) {
+        this.claveSimetrica = claveSimetrica;
+    }
     //genero las claves
     public void genKeyPair(int size) throws NoSuchAlgorithmException,NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException  {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
@@ -133,6 +184,7 @@ public class Servidor {
     }
 
     public void recibirReenviar() throws NoSuchAlgorithmException {
+        System.out.println(this.claveSimetrica);
         while(true){
             try{
                 byte[] buffer= new byte[5000];
@@ -145,7 +197,6 @@ public class Servidor {
                 PublicKey claveActual=null;
                 boolean integridad=false;
                 Socket actual=new Socket(direccion,port);
-                System.out.println("Llega " + mensaje);
 
                 boolean existeEnLista=false;
                 for(Map.Entry<PublicKey, Socket>entrada:listaClaves.entrySet()){
@@ -160,6 +211,7 @@ public class Servidor {
                     this.listaClaves.put(convertPEMToRSA(mensaje), actual);
                     enviarConfirmacion=false;
                     mandarClavePublica(direccion,port);
+                    mandarClaveSimetrica(direccion, port, convertPEMToRSA(mensaje));
                 }else{
                     for(Map.Entry<PublicKey, Socket>entrada:listaClaves.entrySet()){
                         if(entrada.getValue().getInetAddress().equals(direccion) && entrada.getValue().getPuerto()==port){
@@ -177,10 +229,10 @@ public class Servidor {
                     String hashMsj=mensaje.substring(delimitador + 1);
                     hashMsj= DecryptHash(hashMsj, claveActual);
                     mensaje=mensaje.substring(0, delimitador);
-                    mensaje= Decrypt(mensaje);
-                    System.out.println("MENSAJE " +  mensaje);
-                    System.out.println("HASH  " + hashMsj);
-                    System.out.println(hashear(mensaje));
+                    mensaje= desencriptar(mensaje);
+                    //System.out.println("MENSAJE " +  mensaje);
+                    //System.out.println("HASH  " + hashMsj);
+                    //System.out.println(hashear(mensaje));
 
                     if(hashear(mensaje).equals(hashMsj)){
                         System.out.println("Mensaje que llegó de un cliente: " + mensaje);
@@ -210,7 +262,7 @@ public class Servidor {
                         }
                         System.out.println(lista);
                         String mensajeIntegridad="Sé que vos enviaste " + mensaje;
-                        buffer= Encrypt(mensajeIntegridad, claveActual).getBytes();
+                        buffer= encriptar(mensajeIntegridad).getBytes();
                         datagramPacket= new DatagramPacket(buffer, buffer.length, direccion, port);
                         datagramSocket.send(datagramPacket);
 
@@ -226,7 +278,7 @@ public class Servidor {
                                                     break;
                                                 }
                                             }
-                                            buffer = Encrypt(mensaje, claveSuscriptor).getBytes();
+                                            buffer = encriptar(mensaje).getBytes();
                                             datagramPacket = new DatagramPacket(buffer, buffer.length, socket.getInetAddress(), socket.getPuerto());
                                             datagramSocket.send(datagramPacket);
                                             System.out.println("Se mandó msjs a topicos");
@@ -236,14 +288,14 @@ public class Servidor {
                         }
                     }else {
                         mensaje = "Se manipuló la info por terceros, por favor mandá otra vez";
-                        buffer = Encrypt(mensaje, claveActual).getBytes();
+                        buffer = encriptar(mensaje).getBytes();
                         datagramPacket = new DatagramPacket(buffer, buffer.length, direccion, port);
                         datagramSocket.send(datagramPacket);
                     }
 
                     if(!enviarConfirmacion) {
                         String msj="Recibí tu clave pública";
-                        buffer= Encrypt(msj, claveActual).getBytes();
+                        buffer= encriptar(msj).getBytes();
                         datagramPacket=new DatagramPacket(buffer, buffer.length, direccion, port);
                         datagramSocket.send(datagramPacket);
                     }
@@ -258,7 +310,7 @@ public class Servidor {
         }
     }
 
-    public static void main(String[] args) throws SocketException, NoSuchPaddingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
+    public static void main(String[] args) throws Exception {
         DatagramSocket datagramSocket= new DatagramSocket(5000);
         Servidor servidor= new Servidor(datagramSocket);
         servidor.recibirReenviar();

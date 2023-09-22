@@ -2,6 +2,7 @@ import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
@@ -21,6 +22,7 @@ public class Cliente  {
     private PublicKey publicKey;
     private PrivateKey privateKey;
     private PublicKey publicKeyServer;
+    private SecretKeySpec claveSimetricaServidor;
     private byte[] buffer= new byte[5000];
 
     public Cliente(DatagramSocket datagramSocket, InetAddress inetAddress) throws NoSuchPaddingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
@@ -42,6 +44,26 @@ public class Cliente  {
         this.privateKey = privateKey;
     }
 
+
+    public String encriptar(String datos) throws UnsupportedEncodingException, NoSuchAlgorithmException, InvalidKeyException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
+        SecretKeySpec secretKey = this.claveSimetricaServidor;
+        Cipher cipher = Cipher.getInstance("AES");
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+        byte[] datosEncriptar = datos.getBytes("UTF-8");
+        byte[] bytesEncriptados = cipher.doFinal(datosEncriptar);
+        String encriptado = Base64.getEncoder().encodeToString(bytesEncriptados);
+        return encriptado;
+    }
+    public String desencriptar(String datosEncriptados) throws UnsupportedEncodingException, NoSuchAlgorithmException, InvalidKeyException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
+        SecretKeySpec secretKey = this.claveSimetricaServidor;
+        Cipher cipher = Cipher.getInstance("AES");
+        cipher.init(Cipher.DECRYPT_MODE, secretKey);
+        byte[] bytesEncriptados = Base64.getDecoder().decode(datosEncriptados);
+        byte[] datosDesencriptados = cipher.doFinal(bytesEncriptados);
+        String datos = new String(datosDesencriptados);
+
+        return datos;
+    }
     //genero las claves
     public void genKeyPair(int size) throws NoSuchAlgorithmException,NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException  {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
@@ -116,6 +138,11 @@ public class Cliente  {
         System.arraycopy(b, 0, b2, 1, b.length);
         return new BigInteger(b2).toString(36);
     }
+    public SecretKeySpec convertStringToSecretKeyto(String encodedKey) {
+        byte[] decodedKey = Base64.getDecoder().decode(encodedKey);
+        SecretKeySpec originalKey = new SecretKeySpec(decodedKey, 0, decodedKey.length, "AES");
+        return originalKey;
+    }
 
     public void setPublicKeyServer(PublicKey publicKeyServer) {
         this.publicKeyServer = publicKeyServer;
@@ -150,8 +177,12 @@ public class Cliente  {
                         if(this.publicKeyServer==null){
                             setPublicKeyServer(convertPEMToRSA(recibido));
                             System.out.println("RECIBISTE LA CLAVE PUBLICA DEL SERVER");
+                        }else if(this.claveSimetricaServidor == null && this.publicKeyServer != null){
+                            this.claveSimetricaServidor=convertStringToSecretKeyto(Decrypt(recibido));
+                            System.out.println("Ya tengo la clave simetrica");
+                            System.out.println(this.claveSimetricaServidor);
                         }else{
-                            System.out.println(Decrypt(recibido));
+                            System.out.println(desencriptar(recibido));
                         }
                         Arrays.fill(buffer, (byte) 0);
                     }
@@ -177,7 +208,7 @@ public class Cliente  {
                 String mensaje = entrada.nextLine();
                 String hash= hashear(mensaje);
                 hash= EncryptHash(hash);
-                mensaje= Encrypt(mensaje);
+                mensaje= encriptar(mensaje);
                 String msjFinal= mensaje + "°" + hash;
                 buffer = msjFinal.getBytes();
                 DatagramPacket datagramPacket = new DatagramPacket(buffer, buffer.length, inetAddress, 5000); // 5000 es el numero de puerto del servidor
